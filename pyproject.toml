@@ -1,0 +1,24 @@
+[project]
+name = "immport-cli"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Bjarne Hiller", email = "bjarne.hiller@uni-rostock.de" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "immport-client",
+    "requests>=2.33.1",
+    "typer>=0.24.1",
+]
+
+[project.scripts]
+immport-cli = "immport_cli.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.10.2,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+immport-client = { git = "https://github.com/chillerb/immport-client" }
