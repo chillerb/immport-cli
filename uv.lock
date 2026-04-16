@@ -152,7 +152,7 @@ requires-dist = [
 [[package]]
 name = "immport-client"
 version = "1.0.0"
-source = { git = "https://github.com/chillerb/immport-client#46ac168d0f3f993c0942ae4c21df2079d4444a6f" }
+source = { git = "https://github.com/chillerb/immport-client#4b92fcce87afb13f5fa4630afe0ab14f0838b687" }
 dependencies = [
     { name = "pydantic" },
     { name = "python-dateutil" },
