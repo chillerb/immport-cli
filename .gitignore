@@ -1,7 +1,7 @@
 data/
 SDY*/
-results.json
-manifest.json
+*results.json
+*manifest.json
 
 # Python-generated files
 __pycache__/

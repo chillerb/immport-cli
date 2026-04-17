@@ -6,11 +6,15 @@
 
 ```sh
 # show info
-immport-cli about SDY1 --username ${USERNAME} --password ${PASSWORD}
+immport-cli about SDY2015 --username ${USERNAME} --password ${PASSWORD}
 
 # get file manifest
-immport-cli manifest SDY1 --username ${USERNAME} --password ${PASSWORD} -o manifest.json
+immport-cli manifest SDY2015 --username ${USERNAME} --password ${PASSWORD} -o manifest.json
 
-# download files
-immport-cli download manifest.json --username ${USERNAME} --password ${PASSWORD}
+# download result files from a manifest
+immport-cli download --manifest manifest.json --username ${USERNAME} --password ${PASSWORD} --results-only
+
+# download files for a study 
+immport-cli download --study SDY2015 --username ${USERNAME} --password ${PASSWORD} --results-only
 ```
+
