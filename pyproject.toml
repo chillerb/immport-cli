@@ -1,24 +1,26 @@
 [project]
 name = "immport-cli"
-version = "0.1.0"
-description = "Add your description here"
+description = "CLI tool for the unofficial ImmPort API Python client"
 readme = "README.md"
 authors = [
     { name = "Bjarne Hiller", email = "bjarne.hiller@uni-rostock.de" }
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "immport-client",
+    "immport-client>=1.0.0",
     "requests>=2.33.1",
     "typer>=0.24.1",
 ]
+dynamic = ["version"]
 
 [project.scripts]
 immport-cli = "immport_cli.cli:app"
 
 [build-system]
-requires = ["uv_build>=0.10.2,<0.11.0"]
-build-backend = "uv_build"
+requires = ["setuptools>=61", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
 
-[tool.uv.sources]
-immport-client = { git = "https://github.com/chillerb/immport-client" }
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
+version_file = "src/immport_cli/_version.py"
