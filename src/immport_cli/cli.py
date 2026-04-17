@@ -257,7 +257,7 @@ def download(
     password: str = None,
     method: Literal["s3", "stream"] = "s3",
     workers: int = 4,
-    pattern: str = typer.Option(None, "--patern", "-p", help="match file paths against this glob pattern"),
+    pattern: str = typer.Option(None, "--pattern", "-p", help="match file paths against this glob pattern"),
     output: Path | None = typer.Option(None, "--output", "-o", help="output directory")
 ):
     """
