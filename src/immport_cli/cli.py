@@ -286,7 +286,7 @@ def download(
     if study_accession is not None:
         manifest_path = output / f"{study_accession}-manifest.json"
         logger.info(f"downloading manifest file for {study_accession} to {manifest_path}")
-        get_manifest(study_accession, username, password, output / manifest_path)
+        get_manifest(study_accession, username, password, manifest_path)
 
     with open(manifest_path, "r") as manifest_json:
         logger.info(f"reading manifest file {manifest_path}")
