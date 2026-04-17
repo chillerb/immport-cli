@@ -2,6 +2,7 @@ data/
 SDY*/
 *results.json
 *manifest.json
+src/immport_cli/_version.py
 
 # Python-generated files
 __pycache__/
