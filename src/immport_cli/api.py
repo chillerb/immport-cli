@@ -131,23 +131,10 @@ def request_results(
     return response.data
 
 
-def _resolve_progress(
-    progress: Literal["log", "rich"] | ProgressReporter | None = None,
-) -> ProgressReporter:
-    """Utility function to construct the right progress reporter."""
-    if progress is None:
-        progress = NullProgressReporter()
-    elif progress == "log":
-        progress = LoggingProgressReporter(logger)
-    elif progress == "rich":
-        progress = RichProgressReporter()
-    return progress
-
-
 def _download_file(
     config: Configuration,
     file_info: FileDetails,
-    output: Path,
+    file_path: Path,
     progress: ProgressReporter,
     access_method: Literal["s3", "stream"] = "s3",
     chunk_size: int = 8192
@@ -158,7 +145,7 @@ def _download_file(
         download_url = api.get_url_from_drs(file_info.file_uuid, access_method)
         url = download_url.url
 
-    logger.info(f"start downloading {file_info.path} to {output}...")
+    logger.info(f"start downloading {file_info.path} to {file_path}...")
     with requests.get(url, stream=True) as response:
         response.raise_for_status()
 
@@ -169,7 +156,7 @@ def _download_file(
 
         md5 = hashlib.md5()
 
-        with open(output, "wb") as f:
+        with open(file_path, "wb") as f:
             for chunk in response.iter_content(chunk_size):
                 f.write(chunk)
                 md5.update(chunk)
@@ -177,16 +164,16 @@ def _download_file(
                 progress.advance(task, len(chunk))
 
         if md5.hexdigest() != file_info.generated_md5:
-            raise RuntimeError(f"invalid md5 for file {output}")
+            raise RuntimeError(f"invalid md5 for file {file_path}")
 
         progress.remove_task(task)
-    return output
+    return file_path
 
 
 def _download_worker(
     config: Configuration,
     file_info: FileDetails,
-    output: Path,
+    file_path: Path,
     progress: ProgressReporter,
     access_method: Literal["s3", "stream"] = "s3",
 ) -> Path:
@@ -195,10 +182,9 @@ def _download_worker(
 
     :param config: Configuration for the ImmPort API Client
     :param file_info: file informations
-    :param output: file output path
+    :param file_path: path to download file to
     :param progress: progress reporter to add download task
     """
-    file_path = output / file_info.path
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
     if file_path.exists():
@@ -235,7 +221,7 @@ def download_files(
     workers: int = 4,
     output: Path | None = None,
     with_base_dir: bool = True,
-    progress: Literal["log", "rich"] | ProgressReporter | None = None
+    progress: ProgressReporter | None = None
 ):
     """
     Download files given their FileDetails.
@@ -253,35 +239,36 @@ def download_files(
 
     output.mkdir(parents=True, exist_ok=True)
 
+    if progress is None:
+        progress = NullProgressReporter()
+
     if from_data:
         files = [FileDetails.from_dict(file) for file in files]
 
     logger.info(f"starting file download for {len(files)} files...")
 
-    # without context manager, Progress can eat the terminal cursor
-    with _resolve_progress(progress) as progress:
-        task = progress.add_task("download", total=len(files))
+    task = progress.add_task("download", total=len(files))
 
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            try:
-                futures = []
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        try:
+            futures = []
 
-                for file_info in files:
-                    file_path = Path(file_info.path)
-                    if not with_base_dir:
-                        file_path = Path(*file_path.parts[1:])
-                    file_output_path = output / file_path
-                    future = executor.submit(_download_worker, config, file_info, file_output_path, progress, method)
-                    futures.append(future)
+            for file_info in files:
+                file_path = Path(file_info.path)
+                if not with_base_dir:
+                    file_path = Path(*file_path.parts[1:])
+                file_output_path = output / file_path
+                future = executor.submit(_download_worker, config, file_info, file_output_path, progress, method)
+                futures.append(future)
 
-                paths = []
-                for future in as_completed(futures):
-                    paths.append(future.result())
-                    progress.advance(task)
-            except (Exception, KeyboardInterrupt) as error:
-                logger.exception("shutting down executor")
-                executor.shutdown(wait=False, cancel_futures=True)
-                raise error
+            paths = []
+            for future in as_completed(futures):
+                paths.append(future.result())
+                progress.advance(task)
+        except (Exception, KeyboardInterrupt) as error:
+            logger.exception("shutting down executor")
+            executor.shutdown(wait=False, cancel_futures=True)
+            raise error
 
     logger.info("download finished successfully!")
     return paths
@@ -295,8 +282,9 @@ def download_study(
     workers: int = 4,
     pattern: str = None,
     output: Path | None = None,
+    make_study_dir: bool = True,
     with_base_dir: bool = False,
-    progress: Literal["log", "rich"] | ProgressReporter | None = None,
+    progress: ProgressReporter | None = None,
 ) -> list[Path]:
     """
     Download files of a study.
@@ -306,13 +294,16 @@ def download_study(
     :param results_only: only download result files
     :param method: which download method to use (stream is more robust)
     :param pattern: only download files from the manifest when their path matches this pattern
+    :param make_study_dir: put files in output/study_accession
+    :param with_base_dir: if False, remove base dir from file paths
     :param workers: number of download workers
     :param output: output directory
     """
     if output is None:
         output = Path(os.getcwd())
 
-    output = output / study_accession
+    if make_study_dir:
+        output = output / study_accession
 
     if not output.exists():
         logger.info(f"creating output directory {output}")
@@ -338,17 +329,19 @@ def download_study(
         logger.info(f"matching file paths against glob pattern {pattern}")
         manifest = [file for file in manifest if Path(file.path).match(pattern)]
 
-    with _resolve_progress(progress) as progress:
-        paths = download_files(
-            config,
-            manifest,
-            from_data=False,
-            method=method,
-            workers=workers,
-            output=output,
-            with_base_dir=with_base_dir,
-            progress=progress
-        )
+    if progress is None:
+        progress = NullProgressReporter()
+
+    paths = download_files(
+        config,
+        manifest,
+        from_data=False,
+        method=method,
+        workers=workers,
+        output=output,
+        with_base_dir=with_base_dir,
+        progress=progress
+    )
 
     logger.info("download finished successfully!")
     return paths

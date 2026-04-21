@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import os
+
 import typer
 import logging
 
@@ -106,6 +108,7 @@ def download(
     password: str = None,
     method: Literal["s3", "stream"] = "s3",
     workers: int = 4,
+    make_study_dir: bool = True,
     with_base_dir: bool = False,
     pattern: str = typer.Option(None, "--pattern", "-p", help="match file paths against this glob pattern"),
     output: Path | None = typer.Option(None, "--output", "-o", help="output directory")
@@ -117,6 +120,8 @@ def download(
     :param username: immport username
     :param password: immport password
     :param results: path to a results.json file to only download the intersection of results.json and manifest.json
+    :param make_study_dir: put files in output/study_accession
+    :param with_base_dir: if False, remove base dir from file paths
     :param pattern: only download files from the manifest when their path matches this pattern
     :param workers: number of download workers
     :param output: output directory
@@ -124,13 +129,10 @@ def download(
     config = build_config_from_env(username, password)
 
     if output is None:
-        output = Path(".")
-
-    if not output.exists():
-        logger.info(f"creating output directory {output}")
-        output.mkdir(exist_ok=True, parents=True)
+        output = Path(os.getcwd())
 
     try:
+        # without context manager, Progress can eat the terminal cursor
         with Progress(console=console, transient=True) as rich_progress:
             progress = RichProgressReporter(rich_progress)
             download_study(
@@ -140,6 +142,7 @@ def download(
                 method=method,
                 workers=workers,
                 pattern=pattern,
+                make_study_dir=make_study_dir,
                 with_base_dir=with_base_dir,
                 progress=progress,
             )
