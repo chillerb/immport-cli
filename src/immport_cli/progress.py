@@ -22,7 +22,7 @@ class ProgressReporter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def advance(self, task_id: int) -> None:
+    def advance(self, task_id: int, advance: int = 1) -> None:
         raise NotImplementedError()
 
     @abstractmethod
@@ -76,7 +76,7 @@ class LoggingProgressReporter(ProgressReporter):
 
         def __str__(self) -> str:
             if self.total is not None:
-                msg = f"[{self.description}] [f{"#" * int(10 * self.completed / self.total)}] [{self.completed} / {self.total}]"
+                msg = f"[{self.description}] [f{'#' * int(10 * self.completed / self.total):-<10}] [{self.completed} / {self.total}]"
             else:
                 msg = f"[{self.description}] [{self.completed}]"
 

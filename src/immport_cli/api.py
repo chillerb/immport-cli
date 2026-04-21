@@ -60,7 +60,7 @@ def build_config_from_env(username: str = None, password: str = None, access_tok
         raise ValueError("missing immport password")
 
     if config.access_token is None:
-        access_token = request_access_token(config.username, config.password)
+        config.access_token = request_access_token(config.username, config.password)
 
     return config
 
@@ -85,7 +85,7 @@ def request_manifest(
     config: Configuration,
     study_accession: str,
     output: str | Path | None = None
-) -> list[FileDetails] | Any:
+) -> list[FileDetails]:
     """
     Get the manifest file of a study.
 
@@ -110,7 +110,7 @@ def request_results(
     config: Configuration,
     study_accession: str,
     output: str | Path | None = None
-) -> list[VResultFilePath] | Any:
+) -> list[VResultFilePath]:
     """
     Get the result files of a study.
 
@@ -255,7 +255,7 @@ def download_files(
         for future in as_completed(futures):
             try:
                 paths.append(future.result())
-                progress.update(task, advance=1)
+                progress.advance(task)
             except Exception as error:
                 executor.shutdown(wait=False, cancel_futures=True)
                 raise error
@@ -308,13 +308,13 @@ def download_study(
         # result paths start with an extra /
         rpaths = [result.file_path.lstrip("/") for result in results]
         # filter for result paths
-        files = [file for file in manifest if file.path in rpaths]
+        manifest = [file for file in manifest if file.path in rpaths]
 
     # filter files by pattern
     if pattern is not None:
         logger.info(f"matching file paths against glob pattern {pattern}")
-        files = [file for file in files if Path(file.path).match(pattern)]
+        manifest = [file for file in manifest if Path(file.path).match(pattern)]
 
-    paths = download_files(config, files, from_data=False, method=method, workers=workers, output=output, progress=progress)
+    paths = download_files(config, manifest, from_data=False, method=method, workers=workers, output=output, progress=progress)
     logger.info("download finished successfully!")
     return paths
