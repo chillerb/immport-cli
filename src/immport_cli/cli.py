@@ -18,30 +18,16 @@ from rich.console import Console
 from rich.progress import Progress
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from .api import download_study, download_files, request_manifest, request_results, request_manifest, build_config_from_env
+
+from immport_cli.api import request_access_token
+from immport_cli.progress import ProgressReporter
+
 app = typer.Typer()
 
 console = Console()
 
 logger = logging.getLogger(__name__)
-
-
-def request_access_token(username, password):
-    """
-    Request an ImmPort access token.
-
-    :param username: ImmPort user name.
-    :param password: ImmPort user password.
-
-    return immport_token
-    """
-    IMMPORT_TOKEN_URL = "https://www.immport.org/auth/token"
-
-    response = requests.post(
-        IMMPORT_TOKEN_URL,
-        data={'username': username, 'password': password}
-    )
-    response.raise_for_status()
-    return response.json()["access_token"]
 
 
 def _build_config(username: str | None = None, password: str | None = None, access_token: str | None = None) -> Configuration:
@@ -120,6 +106,8 @@ def get_manifest(
         api = immport_client.StudyFileManifestApi(client)
 
         file_details = api.get_file_details(study_accession)
+        file_details_response = api.get_file_details_with_http_info(study_accession)
+        print(file_details_response.raw_data.decode())
 
     file_details_adapter = TypeAdapter(list[immport_client.FileDetails])
     manifest = file_details_adapter.dump_python(file_details, mode="json")
@@ -258,6 +246,7 @@ def download(
     method: Literal["s3", "stream"] = "s3",
     workers: int = 4,
     pattern: str = typer.Option(None, "--pattern", "-p", help="match file paths against this glob pattern"),
+    progress: ProgressReporter = None,
     output: Path | None = typer.Option(None, "--output", "-o", help="output directory")
 ):
     """
