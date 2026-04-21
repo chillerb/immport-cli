@@ -106,6 +106,7 @@ def download(
     password: str = None,
     method: Literal["s3", "stream"] = "s3",
     workers: int = 4,
+    with_base_dir: bool = False,
     pattern: str = typer.Option(None, "--pattern", "-p", help="match file paths against this glob pattern"),
     output: Path | None = typer.Option(None, "--output", "-o", help="output directory")
 ):
@@ -129,19 +130,22 @@ def download(
         logger.info(f"creating output directory {output}")
         output.mkdir(exist_ok=True, parents=True)
 
-    with Progress(console=console, transient=True) as rich_progress:
-        progress = RichProgressReporter(rich_progress)
-        download_study(
-            config,
-            study_accession,
-            results_only=results_only,
-            method=method,
-            workers=workers,
-            pattern=pattern,
-            progress=progress
-        )
-
-    console.log("download complete")
+    try:
+        with Progress(console=console, transient=True) as rich_progress:
+            progress = RichProgressReporter(rich_progress)
+            download_study(
+                config,
+                study_accession,
+                results_only=results_only,
+                method=method,
+                workers=workers,
+                pattern=pattern,
+                with_base_dir=with_base_dir,
+                progress=progress,
+            )
+        console.log("download complete")
+    except KeyboardInterrupt:
+        console.log("download interrupted by user")
 
 
 @app.callback()

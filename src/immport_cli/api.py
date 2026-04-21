@@ -11,7 +11,7 @@ from immport_client import Configuration, FileDetails, StudySummary, VResultFile
 from rich.progress import Progress
 from rich.console import Console
 
-from immport_cli.progress import ProgressReporter, LoggingProgressReporter, NullProgressReporter
+from immport_cli.progress import ProgressReporter, LoggingProgressReporter, NullProgressReporter, RichProgressReporter
 
 
 logger = logging.getLogger(__name__)
@@ -131,6 +131,19 @@ def request_results(
     return response.data
 
 
+def _resolve_progress(
+    progress: Literal["log", "rich"] | ProgressReporter | None = None,
+) -> ProgressReporter:
+    """Utility function to construct the right progress reporter."""
+    if progress is None:
+        progress = NullProgressReporter()
+    elif progress == "log":
+        progress = LoggingProgressReporter(logger)
+    elif progress == "rich":
+        progress = RichProgressReporter()
+    return progress
+
+
 def _download_file(
     config: Configuration,
     file_info: FileDetails,
@@ -145,7 +158,7 @@ def _download_file(
         download_url = api.get_url_from_drs(file_info.file_uuid, access_method)
         url = download_url.url
 
-    logger.info(f"start downloading {file_info.path}...")
+    logger.info(f"start downloading {file_info.path} to {output}...")
     with requests.get(url, stream=True) as response:
         response.raise_for_status()
 
@@ -221,7 +234,8 @@ def download_files(
     method: Literal["s3", "stream"] = "s3",
     workers: int = 4,
     output: Path | None = None,
-    progress: ProgressReporter | None = None
+    with_base_dir: bool = True,
+    progress: Literal["log", "rich"] | ProgressReporter | None = None
 ):
     """
     Download files given their FileDetails.
@@ -231,10 +245,13 @@ def download_files(
     :param from_data: if True, create Pydantic models from files data 
     :param method: which download method to use (stream is more robust)
     :param workers: number of download workers
+    :param omit_base_dir: if True, relative output path is file path without the first file path component
     :param output: output directory
     """
-    if progress is None:
-        progress = LoggingProgressReporter(logger)
+    if output is None:
+        output = Path(os.getcwd())
+
+    output.mkdir(parents=True, exist_ok=True)
 
     if from_data:
         files = [FileDetails.from_dict(file) for file in files]
@@ -242,21 +259,27 @@ def download_files(
     logger.info(f"starting file download for {len(files)} files...")
 
     # without context manager, Progress can eat the terminal cursor
-    task = progress.add_task("download", total=len(files))
+    with _resolve_progress(progress) as progress:
+        task = progress.add_task("download", total=len(files))
 
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = []
-
-        for file_info in files:
-            future = executor.submit(_download_worker, config, file_info, output, progress, method)
-            futures.append(future)
-
-        paths = []
-        for future in as_completed(futures):
+        with ThreadPoolExecutor(max_workers=workers) as executor:
             try:
-                paths.append(future.result())
-                progress.advance(task)
-            except Exception as error:
+                futures = []
+
+                for file_info in files:
+                    file_path = Path(file_info.path)
+                    if not with_base_dir:
+                        file_path = Path(*file_path.parts[1:])
+                    file_output_path = output / file_path
+                    future = executor.submit(_download_worker, config, file_info, file_output_path, progress, method)
+                    futures.append(future)
+
+                paths = []
+                for future in as_completed(futures):
+                    paths.append(future.result())
+                    progress.advance(task)
+            except (Exception, KeyboardInterrupt) as error:
+                logger.exception("shutting down executor")
                 executor.shutdown(wait=False, cancel_futures=True)
                 raise error
 
@@ -272,7 +295,8 @@ def download_study(
     workers: int = 4,
     pattern: str = None,
     output: Path | None = None,
-    progress: ProgressReporter = None,
+    with_base_dir: bool = False,
+    progress: Literal["log", "rich"] | ProgressReporter | None = None,
 ) -> list[Path]:
     """
     Download files of a study.
@@ -285,21 +309,20 @@ def download_study(
     :param workers: number of download workers
     :param output: output directory
     """
-    if progress is None:
-        progress = LoggingProgressReporter()
-
     if output is None:
         output = Path(os.getcwd())
+
+    output = output / study_accession
 
     if not output.exists():
         logger.info(f"creating output directory {output}")
         output.mkdir(exist_ok=True, parents=True)
 
-    manifest_path = output / f"{study_accession}-manifest.json"
+    manifest_path = output / f"manifest.json"
     logger.info(f"downloading manifest file for {study_accession} to {manifest_path}")
     manifest = request_manifest(config, study_accession, output=manifest_path)
 
-    results_path = output / f"{study_accession}-results.json"
+    results_path = output / f"results.json"
     logger.info(f"downloading results file for {study_accession} to {results_path}")
     results = request_results(config, study_accession, output=results_path)
 
@@ -315,6 +338,17 @@ def download_study(
         logger.info(f"matching file paths against glob pattern {pattern}")
         manifest = [file for file in manifest if Path(file.path).match(pattern)]
 
-    paths = download_files(config, manifest, from_data=False, method=method, workers=workers, output=output, progress=progress)
+    with _resolve_progress(progress) as progress:
+        paths = download_files(
+            config,
+            manifest,
+            from_data=False,
+            method=method,
+            workers=workers,
+            output=output,
+            with_base_dir=with_base_dir,
+            progress=progress
+        )
+
     logger.info("download finished successfully!")
     return paths

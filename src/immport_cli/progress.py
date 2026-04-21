@@ -38,7 +38,7 @@ class ProgressReporter(ABC):
 
 
 class RichProgressReporter(ProgressReporter):
-    def __init__(self, progress: Progress | None, **kwargs):
+    def __init__(self, progress: Progress | None = None, **kwargs):
         super().__init__()
         if progress is None:
             progress = Progress(**kwargs)
